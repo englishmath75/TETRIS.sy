@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>JS Tetris (완전판)</title>
+    <title>JS Tetris (최종 수정 버전)</title>
     <style>
         /* ====================
            CSS 스타일
@@ -47,8 +47,7 @@
             height: var(--cell-size);
             border: 1px solid #000;
             box-sizing: border-box;
-            /* 배경색이 설정된 셀에만 그림자 효과 적용 */
-            transition: background-color 0.1s; 
+            transition: background-color 0.1s;
         }
 
         /* 블록 색상 정의 */
@@ -60,11 +59,6 @@
         .cell.t { background-color: #800080; border-color: #400040; box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.5); }
         .cell.z { background-color: #ff0000; border-color: #800000; box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.5); }
         
-        /* 빈 셀의 배경을 어둡게 설정 */
-        .cell:not([class*="i"]):not([class*="j"]):not([class*="l"]):not([class*="o"]):not([class*="s"]):not([class*="t"]):not([class*="z"]) {
-            background-color: #111;
-        }
-
         .info-panel {
             width: 150px;
         }
@@ -86,10 +80,6 @@
             z-index: 100;
         }
         
-        #game-over h1 {
-            color: red;
-        }
-
         button {
             padding: 10px 20px;
             cursor: pointer;
@@ -135,29 +125,29 @@
         const scoreDisplay = document.getElementById('score');
         const gameOverPanel = document.getElementById('game-over');
         const finalScoreDisplay = document.getElementById('final-score');
-        const cells = []; // 게임 보드의 모든 셀 DOM 요소를 저장
+        const cells = []; 
         
-        // 🧱 보드 상태 (고정된 블록을 저장하는 2차원 배열)
+        // 🧱 보드 상태: 고정된 블록을 저장 (0은 빈 칸, 그 외는 블록 색상 클래스 문자열)
         let grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
 
         // 🧱 테트로미노 형태와 색상 정의
         const TETROMINOS = [
-            { shape: [[0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]], color: 'i' }, // I
-            { shape: [[1, 0, 0], [1, 1, 1], [0, 0, 0]], color: 'j' }, // J
-            { shape: [[0, 0, 1], [1, 1, 1], [0, 0, 0]], color: 'l' }, // L
-            { shape: [[1, 1], [1, 1]], color: 'o' }, // O
-            { shape: [[0, 1, 1], [1, 1, 0], [0, 0, 0]], color: 's' }, // S
-            { shape: [[0, 1, 0], [1, 1, 1], [0, 0, 0]], color: 't' }, // T
-            { shape: [[1, 1, 0], [0, 1, 1], [0, 0, 0]], color: 'z' }  // Z
+            { shape: [[0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]], color: 'i' },
+            { shape: [[1, 0, 0], [1, 1, 1], [0, 0, 0]], color: 'j' },
+            { shape: [[0, 0, 1], [1, 1, 1], [0, 0, 0]], color: 'l' },
+            { shape: [[1, 1], [1, 1]], color: 'o' },
+            { shape: [[0, 1, 1], [1, 1, 0], [0, 0, 0]], color: 's' },
+            { shape: [[0, 1, 0], [1, 1, 1], [0, 0, 0]], color: 't' },
+            { shape: [[1, 1, 0], [0, 1, 1], [0, 0, 0]], color: 'z' }
         ];
 
-        let currentPiece; // { shape, color, x, y }
+        let currentPiece; 
         let score = 0;
         let gameInterval;
         let isGameOver = false;
 
         // ===================================
-        // 1. 초기화 및 보드 생성
+        // 1. 초기화 및 유틸리티
         // ===================================
 
         function createBoard() {
@@ -170,38 +160,50 @@
         }
         
         function getCell(x, y) {
-            return cells[y * COLS + x];
+            if (x >= 0 && x < COLS && y >= 0 && y < ROWS) {
+                return cells[y * COLS + x];
+            }
+            return null;
         }
 
         // ===================================
-        // 2. 블록 그리기 및 지우기
+        // 2. 블록 그리기 및 DOM 업데이트
         // ===================================
-        
-        // 움직이는 블록을 DOM에 그립니다.
-        function draw(isDrawing = true) {
+
+        function updateDOMCell(x, y, colorClass) {
+            const cell = getCell(x, y);
+            if (cell) {
+                // 기존 색상 클래스 제거 후 새 색상 클래스 적용
+                cell.className = 'cell'; 
+                if (colorClass !== 0) {
+                    cell.classList.add(colorClass);
+                }
+            }
+        }
+
+        // Grid 상태와 현재 블록을 모두 반영하여 보드를 그립니다.
+        function drawBoard() {
+            // 1. 고정된 블록 (Grid) 그리기
+            for (let y = 0; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    updateDOMCell(x, y, grid[y][x]);
+                }
+            }
+
+            // 2. 움직이는 블록 (CurrentPiece) 그리기
             currentPiece.shape.forEach((row, rowIndex) => {
                 row.forEach((cellValue, colIndex) => {
                     if (cellValue === 1) {
                         const x = currentPiece.x + colIndex;
                         const y = currentPiece.y + rowIndex;
-                        const cell = getCell(x, y);
                         
-                        if (cell) {
-                            if (isDrawing) {
-                                cell.classList.add(currentPiece.color);
-                            } else {
-                                cell.classList.remove(currentPiece.color);
-                            }
-                        }
+                        // 현재 블록은 Grid의 내용과 상관없이 그려져야 합니다.
+                        updateDOMCell(x, y, currentPiece.color);
                     }
                 });
             });
         }
         
-        function undraw() {
-            draw(false);
-        }
-
         // ===================================
         // 3. 충돌 검사
         // ===================================
@@ -213,12 +215,12 @@
                         const x = newX + colIndex;
                         const y = newY + rowIndex;
 
-                        // 벽 (좌, 우, 바닥) 충돌 검사
+                        // 1. 벽 충돌 검사
                         if (x < 0 || x >= COLS || y >= ROWS) {
                             return false;
                         }
                         
-                        // 다른 고정된 블록과의 충돌 검사 (y >= 0 조건으로 보드 밖 검사 방지)
+                        // 2. 다른 고정된 블록과의 충돌 검사 (Grid에 색상이 있는 경우)
                         if (y >= 0 && grid[y][x] !== 0) {
                             return false;
                         }
@@ -232,37 +234,30 @@
         // 4. 게임 로직
         // ===================================
 
-        function spawnPiece() {
-            const random = Math.floor(Math.random() * TETROMINOS.length);
-            const piece = TETROMINOS[random];
-
-            currentPiece = {
-                shape: piece.shape,
-                color: piece.color,
-                // 가운데 정렬
-                x: Math.floor(COLS / 2) - Math.floor(piece.shape[0].length / 2),
-                y: 0 
-            };
-            
-            // 새 블록 생성 시 바로 충돌하면 게임 오버
-            if (!isValidMove(currentPiece.x, currentPiece.y, currentPiece.shape)) {
-                gameOver();
-                return;
-            }
-            
-            draw();
-        }
-        
         function move(newX, newY, newShape) {
             if (isValidMove(newX, newY, newShape)) {
-                undraw();
                 currentPiece.x = newX;
                 currentPiece.y = newY;
-                currentPiece.shape = newShape; // 회전 시 사용
-                draw();
+                currentPiece.shape = newShape; 
+                drawBoard();
                 return true;
             }
             return false;
+        }
+
+        function rotate() {
+            const rows = currentPiece.shape.length;
+            const cols = currentPiece.shape[0].length;
+            let newShape = Array.from({ length: cols }, () => Array(rows).fill(0));
+
+            for (let i = 0; i < rows; i++) {
+                for (let j = 0; j < cols; j++) {
+                    newShape[j][rows - 1 - i] = currentPiece.shape[i][j];
+                }
+            }
+            
+            // 회전 시도 (충돌 시 회전 취소)
+            move(currentPiece.x, currentPiece.y, newShape);
         }
 
         function moveDown() {
@@ -279,88 +274,67 @@
             spawnPiece();
         }
 
-        // 블록 회전 로직
-        function rotate() {
-            // 현재 모양의 행과 열을 바꿉니다 (전치 행렬)
-            const rows = currentPiece.shape.length;
-            const cols = currentPiece.shape[0].length;
-            let newShape = Array.from({ length: cols }, () => Array(rows).fill(0));
-
-            for (let i = 0; i < rows; i++) {
-                for (let j = 0; j < cols; j++) {
-                    newShape[j][rows - 1 - i] = currentPiece.shape[i][j];
-                }
-            }
-            
-            // 회전된 모양으로 이동 시도
-            move(currentPiece.x, currentPiece.y, newShape);
-        }
-
-        // 5. 블록 고정 및 Grid 업데이트
+        // 블록 고정 및 Grid 업데이트:
+        // 움직이던 블록을 Grid 배열에 영구적으로 기록합니다.
         function freeze() {
             currentPiece.shape.forEach((row, rowIndex) => {
                 row.forEach((cellValue, colIndex) => {
                     if (cellValue === 1) {
                         const x = currentPiece.x + colIndex;
                         const y = currentPiece.y + rowIndex;
-                        // Grid에 블록의 색상 코드를 저장 (1은 채워졌다는 의미)
+                        
                         if (y >= 0) {
-                             grid[y][x] = 1; 
-                             // DOM 셀의 클래스는 draw() 함수에 의해 이미 추가되었으므로 별도 처리는 필요 없음
+                             grid[y][x] = currentPiece.color; // 색상 문자열 저장
                         }
                     }
                 });
             });
         }
 
-        // 6. 줄 제거
+        // 줄 제거 및 Grid 업데이트
         function checkLines() {
             let linesCleared = 0;
             
             for (let y = ROWS - 1; y >= 0; y--) {
-                // 현재 행이 모두 채워졌는지 확인 (grid[y]의 모든 값이 1인지)
-                if (grid[y].every(cell => cell === 1)) {
+                // 현재 행이 모두 채워졌는지 확인 (모든 셀이 0이 아님)
+                if (grid[y].every(cell => cell !== 0)) {
                     linesCleared++;
                     
-                    // 1. 해당 행 제거: Grid 배열에서 행을 제거합니다.
+                    // 해당 행을 Grid에서 제거하고, 맨 위에 새로운 빈 행을 추가
                     grid.splice(y, 1);
-                    // 2. 새로운 빈 행을 맨 위에 추가합니다.
                     grid.unshift(Array(COLS).fill(0)); 
                     
-                    // 행이 제거되었으므로, 현재 y 위치를 다시 검사해야 합니다.
+                    // 행이 제거되었으므로, 같은 y 위치를 다시 검사해야 합니다.
                     y++; 
                 }
             }
             
             if (linesCleared > 0) {
-                // 점수 계산 (테트리스 룰 단순화)
                 score += linesCleared * 100 * linesCleared;
                 scoreDisplay.innerText = score;
-                
-                // DOM 보드 업데이트
-                updateBoardFromGrid();
-            }
-        }
-        
-        // Grid 배열의 상태를 기반으로 DOM 셀을 업데이트합니다.
-        function updateBoardFromGrid() {
-            for (let y = 0; y < ROWS; y++) {
-                for (let x = 0; x < COLS; x++) {
-                    const cell = getCell(x, y);
-                    // 모든 색상 클래스를 제거하고, Grid에 블록이 있다면 다시 클래스를 추가합니다.
-                    cell.className = 'cell'; // 기본 클래스로 초기화
-                    if (grid[y][x] !== 0) {
-                        // 실제로는 grid에 블록 색상 코드를 저장하여야 정확합니다. 
-                        // 이 예제에서는 단순하게 고정된 블록은 가장 최근 블록 색상으로 가정합니다.
-                        // (완벽한 구현을 위해서는 freeze() 시 grid에 색상 문자열을 저장해야 합니다.)
-                        cell.classList.add(currentPiece.color); 
-                    }
-                }
+                drawBoard(); // Grid가 변경되었으므로 보드를 다시 그립니다.
             }
         }
 
+        function spawnPiece() {
+            const random = Math.floor(Math.random() * TETROMINOS.length);
+            const piece = TETROMINOS[random];
 
-        // 7. 게임 오버
+            currentPiece = {
+                shape: piece.shape,
+                color: piece.color,
+                x: Math.floor(COLS / 2) - Math.floor(piece.shape[0].length / 2),
+                y: 0 
+            };
+            
+            if (!isValidMove(currentPiece.x, currentPiece.y, currentPiece.shape)) {
+                gameOver();
+                return;
+            }
+            
+            drawBoard();
+        }
+
         function gameOver() {
             clearInterval(gameInterval);
             document.removeEventListener('keydown', control);
@@ -369,7 +343,6 @@
             isGameOver = true;
         }
 
-        // 8. 키보드 컨트롤
         function control(e) {
             if (isGameOver) return;
             
@@ -383,31 +356,27 @@
                 newX++;
                 move(newX, newY, currentPiece.shape);
             } else if (e.key === 'ArrowDown') {
-                // 빠르게 하강 (Hard Drop 대신 Soft Drop으로 처리)
                 moveDown(); 
             } else if (e.key === 'ArrowUp') {
                 rotate();
             }
         }
 
-        // 9. 게임 시작
         function startGame() {
-            // 보드 및 상태 초기화
-            cells.forEach(cell => cell.className = 'cell');
+            // 모든 상태 초기화
             grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+            cells.forEach(cell => cell.className = 'cell'); // DOM 초기화
             score = 0;
             scoreDisplay.innerText = score;
             isGameOver = false;
             gameOverPanel.classList.add('hidden');
 
-            // 첫 블록 생성
             spawnPiece();
 
-            // 게임 루프 시작 (500ms마다 하강)
+            // 게임 루프 시작
             clearInterval(gameInterval);
             gameInterval = setInterval(moveDown, 500);
 
-            // 키보드 이벤트 리스너 추가
             document.addEventListener('keydown', control);
         }
 
