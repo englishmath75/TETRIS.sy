@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>JS Tetris (통합 코드)</title>
+    <style>
+        /* ====================
+           CSS (style.css 통합)
+           ==================== */
+        :root {
+            --board-width: 10;  /* 게임 보드의 너비 (셀 개수) */
+            --board-height: 20; /* 게임 보드의 높이 (셀 개수) */
+            --cell-size: 30px;  /* 각 셀의 크기 */
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #282c34;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            flex-direction: column;
+        }
+
+        .game-container {
+            display: flex;
+            gap: 30px;
+            padding: 20px;
+            background-color: #333;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        #game-board {
+            display: grid;
+            /* CSS Grid를 사용하여 10x20 격자를 만듭니다. */
+            grid-template-columns: repeat(var(--board-width), var(--cell-size));
+            grid-template-rows: repeat(var(--board-height), var(--cell-size));
+            border: 5px solid #555;
+            background-color: #111;
+        }
+
+        .cell {
+            /* 각 셀의 기본 스타일 */
+            width: var(--cell-size);
+            height: var(--cell-size);
+            border: 1px solid #000;
+            box-sizing: border-box; /* 패딩과 보더를 너비/높이에 포함 */
+        }
+
+        /* 블록 색상 정의 (JavaScript에서 이 클래스들을 셀에 추가합니다) */
+        .cell.i { background-color: cyan; border-color: #00ffff; box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.5); }
+        .cell.j { background-color: blue; border-color: #0000ff; box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.5); }
+        .cell.l { background-color: orange; border-color: #ffa500; box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.5); }
+        .cell.o { background-color: yellow; border-color: #ffff00; box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.5); }
+        .cell.s { background-color: lime; border-color: #00ff00; box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.5); }
+        .cell.t { background-color: purple; border-color: #800080; box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.5); }
+        .cell.z { background-color: red; border-color: #ff0000; box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.5); }
+
+        .info-panel {
+            width: 150px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 40px;
+            border-radius: 10px;
+            text-align: center;
+            border: 3px solid red;
+        }
+
+        #game-over h1 {
+            color: red;
+        }
+        
+        button {
+            padding: 10px 20px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <h1>T-Block Test Game</h1>
+    <div class="game-container">
+        <div id="game-board" class="grid">
+            </div>
+
+        <div class="info-panel">
+            <h2>점수: <span id="score">0</span></h2>
+            <h3>조작법:</h3>
+            <p>←, →: 이동</p>
+            <p>↓: 하강 (현재는 자동)</p>
+            <p>↑: 회전 (미구현)</p>
+            </div>
+    </div>
+
+    <div id="game-over" class="hidden">
+        <h1>GAME OVER</h1>
+        <button onclick="startGame()">다시 시작</button>
+    </div>
+
+    <script>
+        /* ====================
+           JavaScript (main.js 통합)
+           ==================== */
+
+        // 🧱 상수 정의
+        const COLS = 10;
+        const ROWS = 20;
+        const board = document.getElementById('game-board');
+        const scoreDisplay = document.getElementById('score');
+        const gameOverPanel = document.getElementById('game-over');
+        const cells = []; // 게임 보드의 모든 셀을 담을 배열 (DOM 요소)
+
+        // T 블록 형태 정의 (4x4 격자 기준)
+        const TETROMINOS = [
+            // 여기서는 T 블록 하나만 정의하고 사용합니다.
+            {
+                shape: [[0, 1, 0], [1, 1, 1], [0, 0, 0]],
+                color: 't'
+            },
+        ];
+
+        let currentPiece; // 현재 움직이는 블록 객체 { shape, color, x, y }
+        let score = 0;
+        let gameInterval;
+        let isGameOver = false;
+
+        // 1. 게임 보드 초기화 및 생성
+        function createBoard() {
+            for (let i = 0; i < ROWS * COLS; i++) {
+                const cell = document.createElement('div');
+                cell.classList.add('cell');
+                board.appendChild(cell);
+                cells.push(cell);
+            }
+        }
+
+        // 특정 좌표 (x, y)의 셀 DOM 요소를 가져옵니다.
+        function getCell(x, y) {
+            if (x >= 0 && x < COLS && y >= 0 && y < ROWS) {
+                return cells[y * COLS + x];
+            }
+            return null; // 보드 바깥
+        }
+
+        // 2. 블록 그리기/지우기
+        function draw() {
+            currentPiece.shape.forEach((row, rowIndex) => {
+                row.forEach((cellValue, colIndex) => {
+                    if (cellValue === 1) {
+                        const x = currentPiece.x + colIndex;
+                        const y = currentPiece.y + rowIndex;
+                        const cell = getCell(x, y);
+                        if (cell) {
+                            cell.classList.add(currentPiece.color);
+                        }
+                    }
+                });
+            });
+        }
+
+        function undraw() {
+            currentPiece.shape.forEach((row, rowIndex) => {
+                row.forEach((cellValue, colIndex) => {
+                    if (cellValue === 1) {
+                        const x = currentPiece.x + colIndex;
+                        const y = currentPiece.y + rowIndex;
+                        const cell = getCell(x, y);
+                        if (cell) {
+                            cell.classList.remove(currentPiece.color);
+                        }
+                    }
+                });
+            });
+        }
+
+        // 3. 충돌 검사
+        function isValidMove(newX, newY, newShape) {
+            for (let rowIndex = 0; rowIndex < newShape.length; rowIndex++) {
+                for (let colIndex = 0; colIndex < newShape[0].length; colIndex++) {
+                    if (newShape[rowIndex][colIndex] === 1) {
+                        const x = newX + colIndex;
+                        const y = newY + rowIndex;
+
+                        // 1. 벽 충돌 검사
+                        if (x < 0 || x >= COLS || y >= ROWS) {
+                            return false;
+                        }
+                        
+                        // 2. 다른 블록과의 충돌 검사 (현재는 구현이 간단하여 생략. 실제 게임에선 필요)
+                        const cell = getCell(x, y);
+                        if (cell && cell.classList.length > 1) { // 'cell' 클래스 외에 다른 클래스가 있다면 고정된 블록
+                            // y < 0은 천장 충돌 검사 (게임 오버 조건)
+                            if (y >= 0) {
+                                return false; 
+                            }
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
+        // 4. 블록 하강
+        function moveDown() {
+            if (isGameOver) return;
+
+            undraw();
+            
+            // 한 칸 아래로 이동이 가능한지 확인
+            if (isValidMove(currentPiece.x, currentPiece.y + 1, currentPiece.shape)) {
+                currentPiece.y++;
+                draw();
+            } else {
+                // 더 이상 내려갈 수 없으므로 고정
+                freeze();
+                checkLines();
+                spawnPiece(); // 새 블록 생성
+                
+                // 새 블록 생성 후 바로 충돌(게임 오버) 확인
+                if (!isValidMove(currentPiece.x, currentPiece.y, currentPiece.shape)) {
+                    gameOver();
+                }
+            }
+        }
+
+        // 5. 블록 고정 (보드에 영구적으로 남김)
+        function freeze() {
+            // 현재 예제에서는 draw()를 했기 때문에 셀에 클래스가 남아있어 고정 처리가 완료됩니다.
+            // 실제 복잡한 게임에서는 보드 상태(2차원 배열)를 업데이트 하는 과정이 추가됩니다.
+        }
+
+        // 6. 줄 제거 (간단 구현)
+        function checkLines() {
+            // 실제 줄 제거 로직은 복잡하므로, 여기서는 점수만 간단히 업데이트
+            score += 10; 
+            scoreDisplay.innerText = score;
+        }
+
+        // 7. 새 블록 생성
+        function spawnPiece() {
+            const random = Math.floor(Math.random() * TETROMINOS.length);
+            const piece = TETROMINOS[random];
+
+            currentPiece = {
+                shape: piece.shape,
+                color: piece.color,
+                x: Math.floor(COLS / 2) - Math.floor(piece.shape[0].length / 2),
+                y: 0 // 맨 위에서 시작
+            };
+            draw();
+        }
+
+        // 8. 게임 오버
+        function gameOver() {
+            clearInterval(gameInterval);
+            document.removeEventListener('keydown', control);
+            gameOverPanel.classList.remove('hidden');
+            isGameOver = true;
+        }
+
+        // 9. 키보드 컨트롤 (좌우 이동만 간단 구현)
+        function control(e) {
+            if (isGameOver) return;
+            
+            let newX = currentPiece.x;
+            
+            if (e.key === 'ArrowLeft') {
+                newX--;
+            } else if (e.key === 'ArrowRight') {
+                newX++;
+            }
+            // else if (e.key === 'ArrowUp') { /* 회전 로직 */ }
+
+            if (isValidMove(newX, currentPiece.y, currentPiece.shape)) {
+                undraw();
+                currentPiece.x = newX;
+                draw();
+            }
+        }
+
+        // 10. 게임 시작
+        function startGame() {
+            // 보드 초기화
+            cells.forEach(cell => cell.className = 'cell');
+            score = 0;
+            scoreDisplay.innerText = score;
+            isGameOver = false;
+            gameOverPanel.classList.add('hidden');
+
+            // 첫 블록 생성
+            spawnPiece();
+
+            // 게임 루프 시작 (예: 800ms마다 하강)
+            clearInterval(gameInterval);
+            gameInterval = setInterval(moveDown, 800);
+
+            // 키보드 이벤트 리스너 추가
+            document.addEventListener('keydown', control);
+        }
+
+        // 페이지 로드 시
+        createBoard();
+        startGame();
+
+    </script>
+</body>
+</html>
